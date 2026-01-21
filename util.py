@@ -96,14 +96,18 @@ def run_any_code_sync(code, language):
     async def main_loop():
         nonlocal result
         client = PystonClient()
-        output = await client.execute(language, [File(code)])
-        result = output
+        try:
+            output = await client.execute(language, [File(code)])
+            result = output
+        finally:
+            await client.close()
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        loop.run_until_complete(main_loop())
+        loop.run_until_complete(asyncio.wait_for(main_loop(), timeout=30))
     finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
         loop.close()
 
     result = result.raw_json

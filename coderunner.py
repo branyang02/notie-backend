@@ -21,33 +21,62 @@ PYTHON_TIMEOUT_SECONDS = 30
 # Patterns that indicate potentially dangerous code
 BLOCKED_PATTERNS = {
     # Direct dangerous functions
-    "exec", "eval", "compile",
+    "exec",
+    "eval",
+    "compile",
     # File operations
-    "open(", "file(",
+    "open(",
+    "file(",
     # OS/system access
-    "subprocess", "os.system", "os.popen", "os.spawn",
-    "import os", "from os", "__import__",
-    "import sys", "from sys",
-    "import shutil", "from shutil",
+    "subprocess",
+    "os.system",
+    "os.popen",
+    "os.spawn",
+    "import os",
+    "from os",
+    "__import__",
+    "import sys",
+    "from sys",
+    "import shutil",
+    "from shutil",
     # Builtins manipulation
-    "__builtins__", "__globals__", "__code__",
-    "__subclasses__", "__bases__", "__mro__",
+    "__builtins__",
+    "__globals__",
+    "__code__",
+    "__subclasses__",
+    "__bases__",
+    "__mro__",
     # Attribute access tricks
-    "getattr", "setattr", "delattr",
+    "getattr",
+    "setattr",
+    "delattr",
     # Other dangerous modules
-    "import socket", "from socket",
-    "import requests", "from requests",
-    "import urllib", "from urllib",
-    "import http", "from http",
-    "import ftplib", "from ftplib",
-    "import telnetlib", "from telnetlib",
-    "import pickle", "from pickle",
-    "import marshal", "from marshal",
-    "import ctypes", "from ctypes",
-    "import multiprocessing", "from multiprocessing",
+    "import socket",
+    "from socket",
+    "import requests",
+    "from requests",
+    "import urllib",
+    "from urllib",
+    "import http",
+    "from http",
+    "import ftplib",
+    "from ftplib",
+    "import telnetlib",
+    "from telnetlib",
+    "import pickle",
+    "from pickle",
+    "import marshal",
+    "from marshal",
+    "import ctypes",
+    "from ctypes",
+    "import multiprocessing",
+    "from multiprocessing",
     # Code introspection
-    "globals(", "locals(", "vars(",
-    "dir(", "type.__",
+    "globals(",
+    "locals(",
+    "vars(",
+    "dir(",
+    "type.__",
 }
 
 
@@ -84,7 +113,9 @@ def get_image(fig):
                 encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
             os.remove(image_filename)
     except subprocess.TimeoutExpired:
-        output = f"Error: Code execution timed out after {PYTHON_TIMEOUT_SECONDS} seconds"
+        output = (
+            f"Error: Code execution timed out after {PYTHON_TIMEOUT_SECONDS} seconds"
+        )
     except subprocess.CalledProcessError as e:
         output = e.stderr
     finally:

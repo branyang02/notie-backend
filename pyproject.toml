@@ -12,6 +12,7 @@ dependencies = [
     "matplotlib>=3.10.8",
     "numpy>=2.4.1",
     "openai>=2.15.0",
+    "pytest>=9.0.2",
     "ruff>=0.14.13",
     "torch>=2.10.0",
     "torchvision>=0.25.0",

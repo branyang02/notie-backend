@@ -100,7 +100,7 @@ def run_any_code_sync(code, language):
             output = await client.execute(language, [File(code)])
             result = output
         finally:
-            await client.close()
+            await client.close_session()
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

@@ -1,10 +1,35 @@
+import asyncio
+import json
+from functools import lru_cache
+
 from openai import OpenAI
 from pyston import PystonClient, File
-import asyncio
 
 client = OpenAI()
 
+# Global event loop and PystonClient for connection reuse
+_loop = None
+_pyston_client = None
 
+
+def _get_loop():
+    """Get or create a reusable event loop."""
+    global _loop
+    if _loop is None or _loop.is_closed():
+        _loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_loop)
+    return _loop
+
+
+def _get_pyston_client():
+    """Get or create a reusable PystonClient."""
+    global _pyston_client
+    if _pyston_client is None:
+        _pyston_client = PystonClient()
+    return _pyston_client
+
+
+@lru_cache(maxsize=1000)
 def get_word_details(word):
     response = client.chat.completions.create(
         model="gpt-3.5-turbo-1106",
@@ -21,7 +46,7 @@ def get_word_details(word):
         ],
     )
 
-    return eval(response.choices[0].message.content)
+    return json.loads(response.choices[0].message.content)
 
 
 def get_audio(text):
@@ -95,20 +120,12 @@ def run_any_code_sync(code, language):
 
     async def main_loop():
         nonlocal result
-        client = PystonClient()
-        try:
-            output = await client.execute(language, [File(code)])
-            result = output
-        finally:
-            await client.close_session()
+        pyston_client = _get_pyston_client()
+        output = await pyston_client.execute(language, [File(code)])
+        result = output
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(asyncio.wait_for(main_loop(), timeout=30))
-    finally:
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
+    loop = _get_loop()
+    loop.run_until_complete(asyncio.wait_for(main_loop(), timeout=30))
 
     result = result.raw_json
     print("-------------------")

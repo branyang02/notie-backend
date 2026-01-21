@@ -10,9 +10,9 @@ sys.modules['openai'] = MagicMock()
 class TestRunAnySyncCodeCleanup:
     """Tests for the async client cleanup in run_any_code_sync."""
 
-    @patch('util.PystonClient')
-    def test_client_close_called_on_success(self, mock_pyston_client_class):
-        """Test that client.close_session() is called after successful execution."""
+    @patch('util._get_pyston_client')
+    def test_client_close_called_on_success(self, mock_get_pyston_client):
+        """Test that execution succeeds with reusable client."""
         from util import run_any_code_sync
 
         # Setup mock client
@@ -26,44 +26,31 @@ class TestRunAnySyncCodeCleanup:
         async def mock_execute(*args):
             return mock_output
 
-        async def mock_close_session():
-            pass
-
         mock_client.execute = mock_execute
-        mock_client.close_session = mock_close_session
-        mock_pyston_client_class.return_value = mock_client
+        mock_get_pyston_client.return_value = mock_client
 
         result = run_any_code_sync("print('Hello')", "python")
 
         assert result == "Hello"
 
-    @patch('util.PystonClient')
-    def test_client_close_called_on_exception(self, mock_pyston_client_class):
-        """Test that client.close_session() is called even when execution fails."""
+    @patch('util._get_pyston_client')
+    def test_client_close_called_on_exception(self, mock_get_pyston_client):
+        """Test that execution errors propagate correctly."""
         from util import run_any_code_sync
 
         mock_client = MagicMock()
-        close_called = False
 
         async def mock_execute(*args):
             raise RuntimeError("Execution failed")
 
-        async def mock_close_session():
-            nonlocal close_called
-            close_called = True
-
         mock_client.execute = mock_execute
-        mock_client.close_session = mock_close_session
-        mock_pyston_client_class.return_value = mock_client
+        mock_get_pyston_client.return_value = mock_client
 
         with pytest.raises(RuntimeError):
             run_any_code_sync("invalid code", "python")
 
-        # Verify close was called despite the exception
-        assert close_called
-
-    @patch('util.PystonClient')
-    def test_compile_error_raises_exception(self, mock_pyston_client_class):
+    @patch('util._get_pyston_client')
+    def test_compile_error_raises_exception(self, mock_get_pyston_client):
         """Test that compilation errors are raised as exceptions."""
         from util import run_any_code_sync
 
@@ -77,20 +64,16 @@ class TestRunAnySyncCodeCleanup:
         async def mock_execute(*args):
             return mock_output
 
-        async def mock_close_session():
-            pass
-
         mock_client.execute = mock_execute
-        mock_client.close_session = mock_close_session
-        mock_pyston_client_class.return_value = mock_client
+        mock_get_pyston_client.return_value = mock_client
 
         with pytest.raises(Exception) as exc_info:
             run_any_code_sync("bad code", "c")
 
         assert "undefined reference" in str(exc_info.value)
 
-    @patch('util.PystonClient')
-    def test_runtime_error_raises_exception(self, mock_pyston_client_class):
+    @patch('util._get_pyston_client')
+    def test_runtime_error_raises_exception(self, mock_get_pyston_client):
         """Test that runtime errors are raised as exceptions."""
         from util import run_any_code_sync
 
@@ -103,12 +86,8 @@ class TestRunAnySyncCodeCleanup:
         async def mock_execute(*args):
             return mock_output
 
-        async def mock_close_session():
-            pass
-
         mock_client.execute = mock_execute
-        mock_client.close_session = mock_close_session
-        mock_pyston_client_class.return_value = mock_client
+        mock_get_pyston_client.return_value = mock_client
 
         with pytest.raises(Exception) as exc_info:
             run_any_code_sync("int main() { int *p = 0; *p = 1; }", "c")

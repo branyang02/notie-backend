@@ -80,6 +80,12 @@ BLOCKED_PATTERNS = {
 }
 
 
+def _needs_plotting(code):
+    """Check if code uses matplotlib/plotting functionality."""
+    plotting_indicators = ("plt.", "matplotlib", "get_image", "savefig")
+    return any(indicator in code for indicator in plotting_indicators)
+
+
 def run_python(code):
     # Check for dangerous patterns
     code_lower = code.lower()
@@ -88,19 +94,27 @@ def run_python(code):
             print(f"Operation not allowed: {pattern}")
             return jsonify({"output": "Error: Operation not allowed"})
 
-    image_filename = f"image_{uuid.uuid4().hex}.png"
-    pre_code = f"""
+    encoded_string = ""
+    output = ""
+    image_filename = None
+
+    # Only add matplotlib imports if the code actually needs plotting
+    if _needs_plotting(code):
+        image_filename = f"image_{uuid.uuid4().hex}.png"
+        pre_code = f"""
 import matplotlib.pyplot as plt
 import numpy as np
 def get_image(fig):
     filename="{image_filename}"
     fig.savefig(filename)
 """
-    encoded_string = ""
-    output = ""
+        full_code = pre_code + code
+    else:
+        full_code = code
+
     try:
         result = subprocess.run(
-            ["python", "-c", pre_code + code],
+            ["python", "-c", full_code],
             text=True,
             capture_output=True,
             check=True,
@@ -108,7 +122,7 @@ def get_image(fig):
         )
         output = result.stdout
         # Check if the image file exists and encode it
-        if os.path.exists(image_filename):
+        if image_filename and os.path.exists(image_filename):
             with open(image_filename, "rb") as image_file:
                 encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
             os.remove(image_filename)
@@ -120,7 +134,7 @@ def get_image(fig):
         output = e.stderr
     finally:
         # Ensure cleanup of image file even on timeout/error
-        if os.path.exists(image_filename):
+        if image_filename and os.path.exists(image_filename):
             os.remove(image_filename)
         return jsonify({"output": output, "image": encoded_string})
 

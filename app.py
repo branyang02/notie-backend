@@ -10,17 +10,24 @@ app = Flask(__name__)
 CORS(app)
 
 
+# Cache git info at module load to avoid subprocess calls on each request
+_git_info = None
+
+
 def get_git_info():
-    try:
-        commit_hash = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True
-        ).strip()
-        commit_message = subprocess.check_output(
-            ["git", "log", "-1", "--pretty=%B"], text=True
-        ).strip()
-        return {"commit_hash": commit_hash, "commit_message": commit_message}
-    except subprocess.CalledProcessError:
-        return {"error": "Could not retrieve git info"}
+    global _git_info
+    if _git_info is None:
+        try:
+            commit_hash = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], text=True
+            ).strip()
+            commit_message = subprocess.check_output(
+                ["git", "log", "-1", "--pretty=%B"], text=True
+            ).strip()
+            _git_info = {"commit_hash": commit_hash, "commit_message": commit_message}
+        except subprocess.CalledProcessError:
+            _git_info = {"error": "Could not retrieve git info"}
+    return _git_info
 
 
 @app.route("/")

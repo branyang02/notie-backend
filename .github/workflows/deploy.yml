@@ -32,10 +32,9 @@ jobs:
             echo "== authorized_keys =="
             cat /home/ubuntu/.ssh/authorized_keys
 
-            echo "== Public IP and SSH command =="
-            PUB_IP=$(curl -s https://ifconfig.me || curl -s https://api.ipify.org)
-            echo "Public IP: $PUB_IP"
-            echo "Try this from your laptop:"
-            echo "ssh ubuntu@$PUB_IP"
+            echo "== Adding Brandon laptop key to ubuntu authorized_keys =="
+            sudo -u ubuntu bash -lc 'echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQaxIsLRbkA9XAc4Qo/xW+Jx7adX+v/YqpHhPeKgCvY jqm9ba@virginia.edu" >> ~/.ssh/authorized_keys'
+            echo "== Done. Current authorized_keys fingerprints: =="
+            ssh-keygen -lf /home/ubuntu/.ssh/authorized_keys
 
 

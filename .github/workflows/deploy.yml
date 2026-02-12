@@ -23,3 +23,10 @@ jobs:
             git pull origin main
             /home/ubuntu/.local/bin/uv sync
             sudo systemctl restart notie
+            echo "User:"
+            whoami
+            echo "Hostname:"
+            hostname
+            echo "Full host info:"
+            hostnamectl || uname -a
+

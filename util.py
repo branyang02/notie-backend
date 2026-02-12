@@ -1,6 +1,4 @@
 import asyncio
-import json
-from functools import lru_cache
 
 from openai import OpenAI
 from pyston import PystonClient, File
@@ -27,26 +25,6 @@ def _get_pyston_client():
     if _pyston_client is None:
         _pyston_client = PystonClient()
     return _pyston_client
-
-
-@lru_cache(maxsize=1000)
-def get_word_details(word):
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo-1106",
-        response_format={"type": "json_object"},
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant designed to output JSON.",
-            },
-            {
-                "role": "user",
-                "content": f"Give me the language of origin, definition, and example usage for the word '{word}' in the format: {{'word': '{word}', 'language_of_origin': '...', 'definition': '...', 'example_usage': '...'}}.",
-            },
-        ],
-    )
-
-    return json.loads(response.choices[0].message.content)
 
 
 def get_audio(text):

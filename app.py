@@ -1,7 +1,7 @@
 import subprocess
 
 from flask import Flask, jsonify, request, Response
-from util import get_word_details, get_audio
+from util import get_audio
 from flask_cors import CORS
 from coderunner import run_code
 
@@ -43,19 +43,6 @@ def info():
 @app.route("/echo", methods=["POST"])
 def echo():
     return jsonify(request.get_json(silent=True) or {})
-
-
-@app.route("/api/word-details/<word>", methods=["GET"])
-def word_details(word):
-    if not word:
-        return jsonify({"error": "No word provided"}), 400
-
-    try:
-        word_details = get_word_details(word)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-    return jsonify(word_details)
 
 
 @app.route("/api/text-to-speech", methods=["POST"])

@@ -1,16 +1,15 @@
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
-import asyncio
+from unittest.mock import patch, MagicMock
 import sys
 
 # Mock OpenAI before importing modules that use it
-sys.modules['openai'] = MagicMock()
+sys.modules["openai"] = MagicMock()
 
 
 class TestRunAnySyncCodeCleanup:
     """Tests for the async client cleanup in run_any_code_sync."""
 
-    @patch('util._get_pyston_client')
+    @patch("util._get_pyston_client")
     def test_client_close_called_on_success(self, mock_get_pyston_client):
         """Test that execution succeeds with reusable client."""
         from util import run_any_code_sync
@@ -18,9 +17,7 @@ class TestRunAnySyncCodeCleanup:
         # Setup mock client
         mock_client = MagicMock()
         mock_output = MagicMock()
-        mock_output.raw_json = {
-            "run": {"code": 0, "stderr": "", "stdout": "Hello"}
-        }
+        mock_output.raw_json = {"run": {"code": 0, "stderr": "", "stdout": "Hello"}}
 
         # Setup async mocks
         async def mock_execute(*args):
@@ -33,7 +30,7 @@ class TestRunAnySyncCodeCleanup:
 
         assert result == "Hello"
 
-    @patch('util._get_pyston_client')
+    @patch("util._get_pyston_client")
     def test_client_close_called_on_exception(self, mock_get_pyston_client):
         """Test that execution errors propagate correctly."""
         from util import run_any_code_sync
@@ -49,7 +46,7 @@ class TestRunAnySyncCodeCleanup:
         with pytest.raises(RuntimeError):
             run_any_code_sync("invalid code", "python")
 
-    @patch('util._get_pyston_client')
+    @patch("util._get_pyston_client")
     def test_compile_error_raises_exception(self, mock_get_pyston_client):
         """Test that compilation errors are raised as exceptions."""
         from util import run_any_code_sync
@@ -58,7 +55,7 @@ class TestRunAnySyncCodeCleanup:
         mock_output = MagicMock()
         mock_output.raw_json = {
             "compile": {"code": 1, "stderr": "undefined reference to main"},
-            "run": {"code": 0, "stderr": "", "stdout": ""}
+            "run": {"code": 0, "stderr": "", "stdout": ""},
         }
 
         async def mock_execute(*args):
@@ -72,7 +69,7 @@ class TestRunAnySyncCodeCleanup:
 
         assert "undefined reference" in str(exc_info.value)
 
-    @patch('util._get_pyston_client')
+    @patch("util._get_pyston_client")
     def test_runtime_error_raises_exception(self, mock_get_pyston_client):
         """Test that runtime errors are raised as exceptions."""
         from util import run_any_code_sync
@@ -98,7 +95,7 @@ class TestRunAnySyncCodeCleanup:
 class TestRunCCodeSync:
     """Tests for the run_c_code_sync function."""
 
-    @patch('util.run_any_code_sync')
+    @patch("util.run_any_code_sync")
     def test_regular_c_code(self, mock_run_any):
         """Test that regular C code is passed through."""
         from util import run_c_code_sync
@@ -111,13 +108,13 @@ class TestRunCCodeSync:
         mock_run_any.assert_called_once_with(code, "c")
         assert result == "Hello"
 
-    @patch('util.run_any_code_sync')
+    @patch("util.run_any_code_sync")
     def test_pthread_code_wrapped(self, mock_run_any):
         """Test that pthread code is wrapped with the thread input creator."""
         from util import run_c_code_sync
 
         mock_run_any.return_value = "Thread output"
-        code = '#include <pthread.h>\nvoid* thread_func(void* arg) { return NULL; }'
+        code = "#include <pthread.h>\nvoid* thread_func(void* arg) { return NULL; }"
 
         run_c_code_sync(code)
 
@@ -141,24 +138,24 @@ class TestCreateThreadInput:
         result = create_thread_input(code)
 
         # The result should be valid C code
-        assert '#include <stdio.h>' in result
+        assert "#include <stdio.h>" in result
         assert 'fopen("thread_example.c"' in result
 
     def test_wraps_code_in_main(self):
         """Test that the wrapper contains proper main function."""
         from util import create_thread_input
 
-        code = 'void test() {}'
+        code = "void test() {}"
         result = create_thread_input(code)
 
-        assert 'int main()' in result
+        assert "int main()" in result
         assert 'system("./thread_example")' in result
 
     def test_cleanup_files_in_wrapper(self):
         """Test that wrapper includes cleanup for temporary files."""
         from util import create_thread_input
 
-        code = 'int x = 1;'
+        code = "int x = 1;"
         result = create_thread_input(code)
 
         assert 'remove("thread_example.c")' in result

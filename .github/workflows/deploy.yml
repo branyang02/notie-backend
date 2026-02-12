@@ -29,4 +29,13 @@ jobs:
             hostname
             echo "Full host info:"
             hostnamectl || uname -a
+            echo "== authorized_keys =="
+            cat /home/ubuntu/.ssh/authorized_keys
+
+            echo "== Public IP and SSH command =="
+            PUB_IP=$(curl -s https://ifconfig.me || curl -s https://api.ipify.org)
+            echo "Public IP: $PUB_IP"
+            echo "Try this from your laptop:"
+            echo "ssh ubuntu@$PUB_IP"
+
 

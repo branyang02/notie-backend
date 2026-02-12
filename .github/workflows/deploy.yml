@@ -23,18 +23,3 @@ jobs:
             git pull origin main
             /home/ubuntu/.local/bin/uv sync
             sudo systemctl restart notie
-            echo "User:"
-            whoami
-            echo "Hostname:"
-            hostname
-            echo "Full host info:"
-            hostnamectl || uname -a
-            echo "== authorized_keys =="
-            cat /home/ubuntu/.ssh/authorized_keys
-
-            echo "== Adding Brandon laptop key to ubuntu authorized_keys =="
-            sudo -u ubuntu bash -lc 'echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQaxIsLRbkA9XAc4Qo/xW+Jx7adX+v/YqpHhPeKgCvY jqm9ba@virginia.edu" >> ~/.ssh/authorized_keys'
-            echo "== Done. Current authorized_keys fingerprints: =="
-            ssh-keygen -lf /home/ubuntu/.ssh/authorized_keys
-
-

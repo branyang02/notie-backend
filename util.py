@@ -1,9 +1,6 @@
 import asyncio
 
-from openai import OpenAI
 from pyston import PystonClient, File
-
-client = OpenAI()
 
 # Global event loop and PystonClient for connection reuse
 _loop = None
@@ -25,14 +22,6 @@ def _get_pyston_client():
     if _pyston_client is None:
         _pyston_client = PystonClient()
     return _pyston_client
-
-
-def get_audio(text):
-    """Converts text to speech using OpenAI's API and returns the file path."""
-    response = client.audio.speech.create(
-        model="tts-1", voice="alloy", input=text, response_format="mp3"
-    )
-    return response
 
 
 def create_thread_input(code):

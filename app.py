@@ -1,7 +1,6 @@
 import subprocess
 
-from flask import Flask, jsonify, request, Response
-from util import get_audio
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from coderunner import run_code
 
@@ -43,23 +42,6 @@ def info():
 @app.route("/echo", methods=["POST"])
 def echo():
     return jsonify(request.get_json(silent=True) or {})
-
-
-@app.route("/api/text-to-speech", methods=["POST"])
-def text_to_speech():
-    data = request.get_json()
-    text = data.get("text", "")
-    if not text:
-        return jsonify({"error": "No text provided"}), 400
-
-    try:
-        response = get_audio(text)
-        return Response(
-            response.content, mimetype="audio/mpeg"
-        )  # adjust mimetype based on the format
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/coderunner", methods=["POST"])

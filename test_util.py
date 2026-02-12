@@ -1,9 +1,5 @@
 import pytest
 from unittest.mock import patch, MagicMock
-import sys
-
-# Mock OpenAI before importing modules that use it
-sys.modules["openai"] = MagicMock()
 
 
 class TestRunAnySyncCodeCleanup:

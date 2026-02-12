@@ -1,12 +1,9 @@
 import pytest
 from unittest.mock import patch, MagicMock
-import sys
 
-# Mock OpenAI before importing modules that use it
-sys.modules["openai"] = MagicMock()
 
-from flask import Flask  # noqa: E402
-from coderunner import run_code, run_python, BLOCKED_PATTERNS  # noqa: E402
+from flask import Flask
+from coderunner import run_code, run_python, BLOCKED_PATTERNS
 
 
 @pytest.fixture

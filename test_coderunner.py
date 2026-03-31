@@ -1,186 +1,164 @@
 import pytest
-from unittest.mock import patch, MagicMock
-
+from unittest.mock import patch
 
 from flask import Flask
-from coderunner import run_code, run_python, BLOCKED_PATTERNS
+from coderunner import run_code, _run_python, _run_generic, _split_output, MATPLOTLIB_SENTINEL, MATPLOTLIB_PREAMBLE
+from piston import ExecutionResult
 
 
 @pytest.fixture
 def app():
-    """Create a Flask app context for testing."""
-    app = Flask(__name__)
-    return app
+    return Flask(__name__)
 
 
 @pytest.fixture
 def app_context(app):
-    """Provide app context for tests that need jsonify."""
     with app.app_context():
         yield
 
 
-class TestBlockedPatterns:
-    """Tests for the security pattern blocking in run_python."""
-
-    def test_blocked_patterns_exist(self):
-        """Verify BLOCKED_PATTERNS set contains expected dangerous patterns."""
-        assert "exec" in BLOCKED_PATTERNS
-        assert "eval" in BLOCKED_PATTERNS
-        assert "subprocess" in BLOCKED_PATTERNS
-        assert "import os" in BLOCKED_PATTERNS
-        assert "__builtins__" in BLOCKED_PATTERNS
-
-    @pytest.mark.parametrize(
-        "dangerous_code",
-        [
-            "exec('print(1)')",
-            "eval('1+1')",
-            "import os",
-            "from os import path",
-            "import subprocess",
-            "__builtins__",
-            "open('file.txt')",
-            "import socket",
-            "getattr(obj, 'attr')",
-            "globals()",
-            "locals()",
-        ],
+def _result(stdout="", stderr="", exit_code=0, compile_stderr=None):
+    return ExecutionResult(
+        stdout=stdout, stderr=stderr, exit_code=exit_code, compile_stderr=compile_stderr
     )
-    def test_dangerous_code_blocked(self, app_context, dangerous_code):
-        """Test that dangerous code patterns are blocked."""
-        result = run_python(dangerous_code)
-        data = result.get_json()
-        assert "Error: Operation not allowed" in data["output"]
 
-    def test_safe_code_allowed(self, app_context):
-        """Test that safe code patterns are allowed to execute."""
-        safe_code = "print(1 + 1)"
-        with patch("coderunner.subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.stdout = "2\n"
-            mock_run.return_value = mock_result
 
-            result = run_python(safe_code)  # noqa: F841
-            # Verify subprocess.run was called (code wasn't blocked)
-            assert mock_run.called
+class TestSplitOutput:
+    """Unit tests for sentinel parsing — no Flask or Piston needed."""
 
-    def test_case_insensitive_blocking(self, app_context):
-        """Test that blocking is case-insensitive."""
-        # These should all be blocked
-        variants = ["EXEC('x')", "Eval('x')", "IMPORT OS", "Import Subprocess"]
-        for code in variants:
-            result = run_python(code)
-            data = result.get_json()
-            assert "Error: Operation not allowed" in data["output"], (
-                f"Failed to block: {code}"
-            )
+    def test_no_sentinel(self):
+        text, image = _split_output("Hello\n")
+        assert text == "Hello\n"
+        assert image == ""
+
+    def test_sentinel_stripped_from_output(self):
+        text, image = _split_output(f"line1\n{MATPLOTLIB_SENTINEL}abc123\nline2\n")
+        assert MATPLOTLIB_SENTINEL not in text
+        assert "line1\n" in text
+        assert "line2\n" in text
+
+    def test_sentinel_base64_extracted(self):
+        _, image = _split_output(f"{MATPLOTLIB_SENTINEL}abc123\n")
+        assert image == "abc123"
+
+    def test_last_sentinel_wins(self):
+        _, image = _split_output(
+            f"{MATPLOTLIB_SENTINEL}first\n{MATPLOTLIB_SENTINEL}second\n"
+        )
+        assert image == "second"
+
+    def test_empty_stdout(self):
+        text, image = _split_output("")
+        assert text == ""
+        assert image == ""
 
 
 class TestRunCode:
-    """Tests for the run_code routing function."""
+    """Tests for the run_code dispatch function."""
 
-    @patch("coderunner.run_python")
-    def test_routes_python_code(self, mock_run_python):
-        """Test that Python code is routed to run_python."""
-        mock_run_python.return_value = MagicMock()
-        run_code("print('hello')", "python")
-        mock_run_python.assert_called_once_with("print('hello')")
+    @patch("coderunner._run_python")
+    def test_routes_python(self, mock_py, app_context):
+        run_code("print('hi')", "python")
+        mock_py.assert_called_once_with("print('hi')")
 
-    @patch("coderunner.run_c")
-    def test_routes_c_code(self, mock_run_c):
-        """Test that C code is routed to run_c."""
-        mock_run_c.return_value = MagicMock()
-        run_code("#include <stdio.h>", "c")
-        mock_run_c.assert_called_once_with("#include <stdio.h>")
+    @patch("coderunner._run_generic")
+    def test_routes_c(self, mock_generic, app_context):
+        run_code("#include<stdio.h>", "c")
+        mock_generic.assert_called_once_with("#include<stdio.h>", "c")
 
-    @patch("coderunner.run_any")
-    def test_routes_other_languages(self, mock_run_any):
-        """Test that other languages are routed to run_any."""
-        mock_run_any.return_value = MagicMock()
-        run_code("console.log('hi')", "javascript")
-        mock_run_any.assert_called_once_with("console.log('hi')", "javascript")
+    @patch("coderunner._run_generic")
+    def test_routes_cpp(self, mock_generic, app_context):
+        run_code("#include<iostream>", "cpp")
+        mock_generic.assert_called_once_with("#include<iostream>", "cpp")
+
+    @patch("coderunner._run_generic")
+    def test_routes_rust(self, mock_generic, app_context):
+        run_code("fn main() {}", "rust")
+        mock_generic.assert_called_once_with("fn main() {}", "rust")
+
+    @patch("coderunner._run_generic")
+    def test_routes_java(self, mock_generic, app_context):
+        run_code("class Main {}", "java")
+        mock_generic.assert_called_once_with("class Main {}", "java")
 
 
-class TestRunPythonExecution:
-    """Tests for Python code execution behavior."""
-
-    @patch("coderunner.subprocess.run")
-    @patch("coderunner.os.path.exists", return_value=False)
-    def test_successful_execution(self, mock_exists, mock_run, app_context):
-        """Test successful code execution returns output."""
-        mock_result = MagicMock()
-        mock_result.stdout = "Hello, World!\n"
-        mock_run.return_value = mock_result
-
-        result = run_python("print('Hello, World!')")
-        data = result.get_json()
-
-        assert data["output"] == "Hello, World!\n"
+class TestRunPython:
+    @patch("coderunner.execute_code")
+    def test_successful_execution(self, mock_exec, app_context):
+        mock_exec.return_value = _result(stdout="Hello\n")
+        data = _run_python("print('Hello')").get_json()
+        assert data["output"] == "Hello\n"
         assert data["image"] == ""
 
-    @patch("coderunner.subprocess.run")
-    @patch("coderunner.os.path.exists", return_value=False)
-    def test_timeout_handling(self, mock_exists, mock_run, app_context):
-        """Test that timeout is properly handled."""
-        import subprocess
+    @patch("coderunner.execute_code")
+    def test_runtime_error_returned_as_output(self, mock_exec, app_context):
+        mock_exec.return_value = _result(stderr="NameError: x", exit_code=1)
+        data = _run_python("x").get_json()
+        assert "NameError" in data["output"]
 
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd="python", timeout=60)
+    @patch("coderunner.execute_code")
+    def test_matplotlib_preamble_injected_for_plt(self, mock_exec, app_context):
+        mock_exec.return_value = _result(stdout="")
+        _run_python("plt.show()")
+        submitted = mock_exec.call_args[0][1]
+        assert MATPLOTLIB_PREAMBLE in submitted
 
-        result = run_python("print('test')")
-        data = result.get_json()
+    @patch("coderunner.execute_code")
+    def test_preamble_not_injected_for_plain_code(self, mock_exec, app_context):
+        mock_exec.return_value = _result(stdout="2\n")
+        _run_python("print(1+1)")
+        submitted = mock_exec.call_args[0][1]
+        assert MATPLOTLIB_PREAMBLE not in submitted
 
-        assert "timed out" in data["output"]
-        assert "60 seconds" in data["output"]
-
-    @patch("coderunner.subprocess.run")
-    @patch("coderunner.os.path.exists", return_value=False)
-    def test_error_handling(self, mock_exists, mock_run, app_context):
-        """Test that execution errors are captured."""
-        import subprocess
-
-        error = subprocess.CalledProcessError(1, "python")
-        error.stderr = "SyntaxError: invalid syntax"
-        mock_run.side_effect = error
-
-        result = run_python("print(")
-        data = result.get_json()
-
-        assert "SyntaxError" in data["output"]
-
-
-class TestImageHandling:
-    """Tests for matplotlib image generation."""
-
-    @patch("coderunner.subprocess.run")
-    @patch("coderunner.os.path.exists")
-    @patch("coderunner.os.remove")
-    @patch("builtins.open", create=True)
-    def test_image_encoding(
-        self, mock_open, mock_remove, mock_exists, mock_run, app_context
-    ):
-        """Test that images are properly encoded to base64."""
-        import base64
-
-        mock_result = MagicMock()
-        mock_result.stdout = ""
-        mock_run.return_value = mock_result
-
-        # First call checks if image exists, second is in finally block
-        mock_exists.side_effect = [True, False]
-
-        # Mock file reading
-        test_image_data = b"fake_image_data"
-        mock_file = MagicMock()
-        mock_file.__enter__ = MagicMock(return_value=mock_file)
-        mock_file.__exit__ = MagicMock(return_value=False)
-        mock_file.read.return_value = test_image_data
-        mock_open.return_value = mock_file
-
-        result = run_python(
-            "import matplotlib.pyplot as plt; plt.plot([1,2,3]); get_image(plt.gcf())"
+    @patch("coderunner.execute_code")
+    def test_figure_sentinel_parsed(self, mock_exec, app_context):
+        mock_exec.return_value = _result(
+            stdout=f"some text\n{MATPLOTLIB_SENTINEL}abc123\n"
         )
-        data = result.get_json()
+        data = _run_python("plt.show()").get_json()
+        assert data["image"] == "abc123"
+        assert MATPLOTLIB_SENTINEL not in data["output"]
+        assert "some text\n" in data["output"]
 
-        expected_base64 = base64.b64encode(test_image_data).decode("utf-8")
-        assert data["image"] == expected_base64
+    @patch("coderunner.execute_code")
+    def test_import_os_allowed(self, mock_exec, app_context):
+        """Previously blocked by BLOCKED_PATTERNS; now allowed (Piston sandboxes it)."""
+        mock_exec.return_value = _result(stdout="ok\n")
+        _run_python("import os; print('ok')")
+        assert mock_exec.called
+
+    @patch("coderunner.execute_code")
+    def test_exception_returns_500(self, mock_exec, app_context):
+        import requests
+        mock_exec.side_effect = requests.ConnectionError("Piston unreachable")
+        response = _run_python("print('x')")
+        assert response[1] == 500
+
+
+class TestRunGeneric:
+    @patch("coderunner.execute_code")
+    def test_successful_c_execution(self, mock_exec, app_context):
+        mock_exec.return_value = _result(stdout="hi")
+        data = _run_generic('#include<stdio.h>\nint main(){printf("hi");}', "c").get_json()
+        assert data["output"] == "hi"
+
+    @patch("coderunner.execute_code")
+    def test_compile_error_returned(self, mock_exec, app_context):
+        mock_exec.return_value = _result(
+            exit_code=1, compile_stderr="undefined reference to main"
+        )
+        data = _run_generic("bad code", "c").get_json()
+        assert "undefined reference" in data["output"]
+
+    @patch("coderunner.execute_code")
+    def test_unsupported_language_returns_400(self, mock_exec, app_context):
+        mock_exec.side_effect = ValueError("Unsupported language: 'brainfuck'")
+        response = _run_generic("+++", "brainfuck")
+        assert response[1] == 400
+
+    @patch("coderunner.execute_code")
+    def test_network_error_returns_500(self, mock_exec, app_context):
+        import requests
+        mock_exec.side_effect = requests.ConnectionError("unreachable")
+        response = _run_generic("print('x')", "python")
+        assert response[1] == 500

@@ -23,3 +23,6 @@ jobs:
             git pull origin main
             /home/ubuntu/.local/bin/uv sync
             sudo systemctl restart notie
+            curl --fail --silent --retry 3 --retry-delay 2 \
+                http://localhost:2000/api/v2/runtimes >/dev/null \
+                || (echo "ERROR: Piston is not responding" && exit 1)

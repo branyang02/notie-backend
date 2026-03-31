@@ -1,155 +1,86 @@
-import base64
-import os
-import subprocess
-import uuid
 from flask import jsonify
 
-from util import run_c_code_sync, run_any_code_sync
+from piston import execute_code
 
+MATPLOTLIB_SENTINEL = "__NOTIE_FIGURE__:"
 
-def run_code(code, language):
-    if language == "python":
-        return run_python(code)
-    elif language == "c":
-        return run_c(code)
+# Injected before user code when matplotlib usage is detected.
+# Patches plt.show() and Figure.savefig() to print base64-encoded PNG to stdout
+# with a sentinel prefix, which _split_output() then strips and returns separately.
+MATPLOTLIB_PREAMBLE = """\
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as _plt
+import matplotlib.figure as _mfig
+import io as _io
+import base64 as _b64
+
+_orig_show = _plt.show
+def _patched_show(*a, **kw):
+    for i in _plt.get_fignums():
+        buf = _io.BytesIO()
+        _plt.figure(i).savefig(buf, format='png')
+        print("__NOTIE_FIGURE__:" + _b64.b64encode(buf.getvalue()).decode())
+    _plt.close('all')
+_plt.show = _patched_show
+
+_orig_savefig = _mfig.Figure.savefig
+def _patched_savefig(self, fname, *a, **kw):
+    if isinstance(fname, str):
+        buf = _io.BytesIO()
+        _orig_savefig(self, buf, *a, **kw)
+        print("__NOTIE_FIGURE__:" + _b64.b64encode(buf.getvalue()).decode())
     else:
-        return run_any(code, language)
+        _orig_savefig(self, fname, *a, **kw)
+_mfig.Figure.savefig = _patched_savefig
 
-
-PYTHON_TIMEOUT_SECONDS = 60
-
-# Patterns that indicate potentially dangerous code
-BLOCKED_PATTERNS = {
-    # Direct dangerous functions
-    "exec",
-    "eval",
-    "compile",
-    # File operations
-    "open(",
-    "file(",
-    # OS/system access
-    "subprocess",
-    "os.system",
-    "os.popen",
-    "os.spawn",
-    "import os",
-    "from os",
-    "__import__",
-    "import sys",
-    "from sys",
-    "import shutil",
-    "from shutil",
-    # Builtins manipulation
-    "__builtins__",
-    "__globals__",
-    "__code__",
-    "__subclasses__",
-    "__bases__",
-    "__mro__",
-    # Attribute access tricks
-    "getattr",
-    "setattr",
-    "delattr",
-    # Other dangerous modules
-    "import socket",
-    "from socket",
-    "import requests",
-    "from requests",
-    "import urllib",
-    "from urllib",
-    "import http",
-    "from http",
-    "import ftplib",
-    "from ftplib",
-    "import telnetlib",
-    "from telnetlib",
-    "import pickle",
-    "from pickle",
-    "import marshal",
-    "from marshal",
-    "import ctypes",
-    "from ctypes",
-    "import multiprocessing",
-    "from multiprocessing",
-    # Code introspection
-    "globals(",
-    "locals(",
-    "vars(",
-    "dir(",
-    "type.__",
-}
-
-
-def _needs_plotting(code):
-    """Check if code uses matplotlib/plotting functionality."""
-    plotting_indicators = ("plt.", "matplotlib", "get_image", "savefig")
-    return any(indicator in code for indicator in plotting_indicators)
-
-
-def run_python(code):
-    # Check for dangerous patterns
-    code_lower = code.lower()
-    for pattern in BLOCKED_PATTERNS:
-        if pattern.lower() in code_lower:
-            print(f"Operation not allowed: {pattern}")
-            return jsonify({"output": "Error: Operation not allowed"})
-
-    encoded_string = ""
-    output = ""
-    image_filename = None
-
-    # Only add matplotlib imports if the code actually needs plotting
-    if _needs_plotting(code):
-        image_filename = f"image_{uuid.uuid4().hex}.png"
-        pre_code = f"""
-import matplotlib.pyplot as plt
 import numpy as np
-def get_image(fig):
-    filename="{image_filename}"
-    fig.savefig(filename)
 """
-        full_code = pre_code + code
+
+
+def _needs_plotting(code: str) -> bool:
+    return any(t in code for t in ("plt.", "matplotlib", "savefig"))
+
+
+def _split_output(stdout: str) -> tuple[str, str]:
+    """Separate normal stdout from sentinel-encoded figure data.
+
+    Returns (text_output, last_base64_image_or_empty_string).
+    """
+    lines, image = [], ""
+    for line in stdout.splitlines(keepends=True):
+        if line.startswith(MATPLOTLIB_SENTINEL):
+            image = line[len(MATPLOTLIB_SENTINEL):].rstrip("\n")
+        else:
+            lines.append(line)
+    return "".join(lines), image
+
+
+def run_code(code: str, language: str):
+    if language == "python":
+        return _run_python(code)
     else:
-        full_code = code
+        return _run_generic(code, language)
 
+
+def _run_python(code: str):
+    full_code = (MATPLOTLIB_PREAMBLE + code) if _needs_plotting(code) else code
     try:
-        result = subprocess.run(
-            ["python", "-c", full_code],
-            text=True,
-            capture_output=True,
-            check=True,
-            timeout=PYTHON_TIMEOUT_SECONDS,
-        )
-        output = result.stdout
-        # Check if the image file exists and encode it
-        if image_filename and os.path.exists(image_filename):
-            with open(image_filename, "rb") as image_file:
-                encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
-            os.remove(image_filename)
-    except subprocess.TimeoutExpired:
-        output = (
-            f"Error: Code execution timed out after {PYTHON_TIMEOUT_SECONDS} seconds"
-        )
-    except subprocess.CalledProcessError as e:
-        output = e.stderr
-    finally:
-        # Ensure cleanup of image file even on timeout/error
-        if image_filename and os.path.exists(image_filename):
-            os.remove(image_filename)
-        return jsonify({"output": output, "image": encoded_string})
-
-
-def run_c(code):
-    try:
-        output = run_c_code_sync(code)
-        return jsonify({"output": output})
+        result = execute_code("python", full_code)
+        output, image = _split_output(result.stdout)
+        if not result.success:
+            output = result.error_output
+        return jsonify({"output": output, "image": image})
     except Exception as e:
-        return jsonify({"output": str(e)})
+        return jsonify({"output": str(e), "image": ""}), 500
 
 
-def run_any(code, language):
+def _run_generic(code: str, language: str):
     try:
-        output = run_any_code_sync(code, language)
+        result = execute_code(language, code)
+        output = result.stdout if result.success else result.error_output
         return jsonify({"output": output})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"output": str(e)})
+        return jsonify({"error": str(e)}), 500

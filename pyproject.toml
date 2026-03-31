@@ -5,25 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "aiopyston>=1.2.1",
     "flask>=3.1.2",
     "flask-cors>=6.0.2",
     "gunicorn>=23.0.0",
-    "matplotlib>=3.10.8",
-    "numpy>=2.4.1",
+    "requests>=2.32.0",
     "pytest>=9.0.2",
     "ruff>=0.14.13",
-    "scikit-learn>=1.8.0",
-    "torch>=2.10.0",
-    "torchvision>=0.25.0",
 ]
-
-
-[tool.uv.sources]
-torch = [{ index = "pytorch-cpu" }]
-torchvision = [{ index = "pytorch-cpu" }]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true

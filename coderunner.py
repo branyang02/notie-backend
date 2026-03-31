@@ -16,7 +16,7 @@ def run_code(code, language):
         return run_any(code, language)
 
 
-PYTHON_TIMEOUT_SECONDS = 30
+PYTHON_TIMEOUT_SECONDS = 60
 
 # Patterns that indicate potentially dangerous code
 BLOCKED_PATTERNS = {

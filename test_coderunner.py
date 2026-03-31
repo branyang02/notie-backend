@@ -125,13 +125,13 @@ class TestRunPythonExecution:
         """Test that timeout is properly handled."""
         import subprocess
 
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd="python", timeout=30)
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="python", timeout=60)
 
         result = run_python("print('test')")
         data = result.get_json()
 
         assert "timed out" in data["output"]
-        assert "30 seconds" in data["output"]
+        assert "60 seconds" in data["output"]
 
     @patch("coderunner.subprocess.run")
     @patch("coderunner.os.path.exists", return_value=False)
